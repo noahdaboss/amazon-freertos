@@ -306,9 +306,9 @@ WIFIReturnCode_t WIFI_On( void )
 {
     A_STATUS result;
 
-    /* Prevent re-initialization */
+    /* Prevent re-initialization. WiFi is aleady on this is successful. */
     if (g_wifi_is_on)
-        return eWiFiFailure;
+        return eWiFiSuccess;
 
     /* Initialize Wi-Fi shield */
     result = (A_STATUS)WIFISHIELD_Init();
