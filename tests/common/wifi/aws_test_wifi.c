@@ -113,9 +113,14 @@
 #endif
 
 /* String for round-trip testing. */
-#define testwifiROUND_TRIP_TEST_STRING               "abcd"
+#define testwifiROUND_TRIP_TEST_STRING                  "abcd"
 /* Arbitrary max length for the round trip string. */
-#define testwifiROUND_TRIP_TEST_STRING_MAX_LENGTH    32
+#define testwifiROUND_TRIP_TEST_STRING_MAX_LENGTH       32
+/* The amount of times to retry the socket connect in the round trip test. */
+#define testwifiROUND_TRIP_TEST_RETRY_CONNECTION_TIMES  6
+/* The delay in milliseconds that is multiplied during exponential retires of the socket 
+ * connection in the round trip test. This is to prevent network congestion. */
+#define testwifiROUND_TRIP_TEST_RETRY_DELAY_MS          150
 
 /* Socket receive and send timeouts for the loopback test. These can be
  * configured in aws_test_wifi_config.h*/
@@ -168,6 +173,7 @@ typedef struct
 {
     uint16_t usTaskId;
     WIFIReturnCode_t xWiFiStatus;
+    char cStatusMsg[100];        /* A status message associated with the WiFi return code. This is needed until there are more error return codes. */
     TaskHandle_t xTaskHandle;
 } testwifiTaskParams_t;
 
@@ -323,6 +329,8 @@ static BaseType_t prvRoundTripTest( void )
         pdMS_TO_TICKS( testwifiLOOPBACK_TEST_SOCKETS_RECEIVE_TIMEOUT );
     TickType_t xTxTimeOut =
         pdMS_TO_TICKS( testwifiLOOPBACK_TEST_SOCKETS_SEND_TIMEOUT );
+    uint32_t ulInitialRetryPeriodMs = testwifiROUND_TRIP_TEST_RETRY_DELAY_MS;
+    BaseType_t xMaxRetries = testwifiROUND_TRIP_TEST_RETRY_CONNECTION_TIMES;
 
     configPRINTF(
         ( "%s:%d %s\r\n", __FILENAME__, __LINE__, "Starting round trip test." ) );
@@ -371,8 +379,11 @@ static BaseType_t prvRoundTripTest( void )
         xEchoServerSockaddr.ucLength = sizeof( SocketsSockaddr_t );
         xEchoServerSockaddr.ucSocketDomain = SOCKETS_AF_INET;
 
-        xSocketResult = SOCKETS_Connect( xSocket, &xEchoServerSockaddr,
-                                         sizeof( xEchoServerSockaddr ) );
+        RETRY_EXPONENTIAL( xSocketResult = SOCKETS_Connect( xSocket, &xEchoServerSockaddr,
+                                           sizeof( xEchoServerSockaddr ) ),
+                           SOCKETS_ERROR_NONE,
+                           ulInitialRetryPeriodMs,
+                           xMaxRetries );
 
         if( xSocketResult != SOCKETS_ERROR_NONE )
         {
@@ -2225,6 +2236,7 @@ static void prvConnectionTask( void * pvParameters )
      * complete. */
     pxTaskParams = ( testwifiTaskParams_t * ) ( pvParameters );
     pxTaskParams->xWiFiStatus = eWiFiFailure;
+    memset(pxTaskParams->cStatusMsg, 0, sizeof(pxTaskParams->cStatusMsg));
 
     for( ulIndex = 0; ulIndex < testwifiCONNECTION_LOOP_TIMES; ulIndex++ )
     {
@@ -2233,10 +2245,12 @@ static void prvConnectionTask( void * pvParameters )
 
         if( xWiFiConnectStatus != eWiFiSuccess )
         {
-            configPRINTF(
-                ( "Task %d failed to connect to the AP %s with error code %d.\r\n",
-                  pxTaskParams->usTaskId, xTestNetworkParams.pcSSID,
-                  xWiFiConnectStatus ) );
+            sprintf( pxTaskParams->cStatusMsg, 
+                     "Task %d failed to connect to the AP %s with error code %d.\r\n", 
+                     pxTaskParams->usTaskId, 
+                     xTestNetworkParams.pcSSID,
+                     xWiFiConnectStatus );
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2249,10 +2263,11 @@ static void prvConnectionTask( void * pvParameters )
 
         if( xWiFiConnectStatus != eWiFiSuccess )
         {
-            configPRINTF(
-                ( "Task %d failed to connect to the AP %s with error code %d.\r\n",
-                  pxTaskParams->usTaskId, xClientNetworkParams.pcSSID,
-                  xWiFiConnectStatus ) );
+            sprintf( pxTaskParams->cStatusMsg, 
+                     "Task %d failed to connect to the AP %s with error code %d.\r\n",
+                     pxTaskParams->usTaskId, xClientNetworkParams.pcSSID,
+                     xWiFiConnectStatus );
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2269,10 +2284,12 @@ static void prvConnectionTask( void * pvParameters )
                                                   * task. */
                 testwifiTASK_SYNC_TIMEOUT ) != testwifiTASK_FINISH_MASK )
         {
-            configPRINTF(
-                ( "Task %d timeout waiting for the other task to finish "
-                  "connection.\r\n",
-                  pxTaskParams->usTaskId ) );
+            sprintf( pxTaskParams->cStatusMsg, 
+                     "Task %d timeout waiting for the other task to finish "
+                     "connection.\r\n",
+                     pxTaskParams->usTaskId);
+                    
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2293,8 +2310,10 @@ static void prvConnectionTask( void * pvParameters )
 
         if( xRoundTripResults == pdFALSE )
         {
-            configPRINTF( ( "Task %d failed the round-trip test after connect.\r\n",
-                            pxTaskParams->usTaskId ) );
+            sprintf( pxTaskParams->cStatusMsg,
+                     "Task %d failed the round-trip test after connect.\r\n",
+                     pxTaskParams->usTaskId);
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2310,10 +2329,11 @@ static void prvConnectionTask( void * pvParameters )
                                                              * task. */
                 testwifiTASK_SYNC_TIMEOUT ) != testwifiTASK_FINISH_MASK )
         {
-            configPRINTF(
-                ( "Task %d timeout waiting for the other task to finish round-trip "
-                  "test after connect.\r\n",
-                  pxTaskParams->usTaskId ) );
+            sprintf( pxTaskParams->cStatusMsg,
+                     "Task %d timeout waiting for the other task to finish round-trip "
+                     "test after connect.\r\n",
+                     pxTaskParams->usTaskId );
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2343,10 +2363,11 @@ static void prvConnectionTask( void * pvParameters )
                                                   * task. */
                 testwifiTASK_SYNC_TIMEOUT ) != testwifiTASK_FINISH_MASK )
         {
-            configPRINTF(
-                ( "Task %d timeout waiting for the other task to finish "
-                  "disconnection.\r\n",
-                  pxTaskParams->usTaskId ) );
+            sprintf( pxTaskParams->cStatusMsg,
+                     "Task %d timeout waiting for the other task to finish "
+                     "disconnection.\r\n",
+                     pxTaskParams->usTaskId );
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2355,10 +2376,11 @@ static void prvConnectionTask( void * pvParameters )
 
         if( xIsConnected == pdTRUE )
         {
-            configPRINTF(
-                ( "Task %d returned eWiFiSuccess from WIFI_Disconnect(), but is not "
-                  "disconnected.\r\n",
-                  pxTaskParams->usTaskId ) );
+            sprintf( pxTaskParams->cStatusMsg,
+                     "Task %d returned eWiFiSuccess from WIFI_Disconnect(), but is not "
+                     "disconnected.\r\n",
+                     pxTaskParams->usTaskId );
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2367,10 +2389,11 @@ static void prvConnectionTask( void * pvParameters )
 
         if( xRoundTripResults == pdPASS )
         {
-            configPRINTF(
-                ( "Task %d completed the round-trip test after supposedly "
-                  "disconnecting.\r\n",
-                  pxTaskParams->usTaskId ) );
+            sprintf( pxTaskParams->cStatusMsg,
+                     "Task %d completed the round-trip test after supposedly "
+                     "disconnecting.\r\n",
+                     pxTaskParams->usTaskId );
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
 
@@ -2384,10 +2407,11 @@ static void prvConnectionTask( void * pvParameters )
                                                   * task. */
                 testwifiTASK_SYNC_TIMEOUT ) != testwifiTASK_FINISH_MASK )
         {
-            configPRINTF(
-                ( "Task %d timeout waiting for the other task to finish the round "
-                  "trip after disconnect.\r\n",
-                  pxTaskParams->usTaskId ) );
+            sprintf( pxTaskParams->cStatusMsg,
+                     "Task %d timeout waiting for the other task to finish the round "
+                     "trip after disconnect.\r\n",
+                     pxTaskParams->usTaskId );
+            configPRINTF( ( pxTaskParams->cStatusMsg ) );
             break;
         }
     }
