@@ -282,10 +282,13 @@ static BaseType_t prvConnectAPTest( void )
     WIFIReturnCode_t xWiFiStatus;
     WIFINetworkParams_t xNetworkParams = { 0 };
     BaseType_t xResult = pdPASS;
+    uint32_t ulInitialRetryPeriodMs = 500;
+    BaseType_t xMaxRetries = 6;
 
     prvSetClientNetworkParameters( &xNetworkParams );
 
-    xWiFiStatus = WIFI_ConnectAP( &xNetworkParams );
+    RETRY_EXPONENTIAL( xWiFiStatus = WIFI_ConnectAP( &xNetworkParams ),
+                       eWiFiSuccess, ulInitialRetryPeriodMs, xMaxRetries );
 
     if( eWiFiSuccess != xWiFiStatus )
     {
