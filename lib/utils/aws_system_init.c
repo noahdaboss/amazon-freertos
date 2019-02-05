@@ -23,7 +23,6 @@
  * http://www.FreeRTOS.org
  */
 #include "aws_iot_taskpool.h"
-
 #include "FreeRTOS.h"
 #include "aws_system_init.h"
 
@@ -41,7 +40,7 @@ extern BaseType_t IotMetrics_Init( void );
 BaseType_t SYSTEM_Init()
 {
     BaseType_t xResult = pdPASS;
-    AwsIotTaskPoolInfo_t taskPool = AWS_IOT_TASKPOOL_INFO_INITIALIZER_MEDIUM;
+    AwsIotTaskPoolInfo_t taskPool = AWS_IOT_TASKPOOL_INFO_INITIALIZER_SMALL;
 
     xResult = MQTT_AGENT_Init();
 

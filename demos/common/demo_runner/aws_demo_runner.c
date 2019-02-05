@@ -47,6 +47,7 @@ extern void vStartMQTTBLEEchoDemo( void );
 /* extern void vStartTCPEchoClientTasks_SeparateTasks( void ); */
 /* extern void vStartTCPEchoClientTasks_SingleTasks( void ); */
 /* extern void vStartPOSIXDemo( void ); */
+/* extern void vStartCombinedDemo( void ); */
 
 /*-----------------------------------------------------------*/
 
@@ -66,4 +67,5 @@ void DEMO_RUNNER_RunDemos( void )
     /* vStartTCPEchoClientTasks_SeparateTasks(); */
     /* vStartTCPEchoClientTasks_SingleTasks(); */
     /* vStartPOSIXDemo(); */
+    /* vStartCombinedDemo(); */
 }

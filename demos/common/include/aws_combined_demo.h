@@ -1,6 +1,6 @@
 /*
- * Amazon FreeRTOS V1.4.2
- * Copyright (C) 2018 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * Amazon FreeRTOS V1.4.4
+ * Copyright (C) 2019 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -23,28 +23,12 @@
  * http://www.FreeRTOS.org
  */
 
-/**
- * @file aws_ble_config.h
- * @brief BLE configuration overrides for ESP32 board.
- */
+#ifndef _AWS_COMBINED_DEMO_H_
+#define _AWS_COMBINED_DEMO_H_
+
+#include "aws_demo.h"
+
+demoDECLARE_DEMO( vStartCombinedDemo );
 
 
-#ifndef _AWS_BLE_CONFIG_H_
-#define _AWS_BLE_CONFIG_H_
-
-/* Device name for this peripheral device. */
-#define bleconfigDEVICE_NAME                     "ESP32"
-
-/* Enable WIFI provisioning GATT service. */
-#define bleconfigENABLE_WIFI_PROVISIONING         ( 1 )
-#define bleconfigENABLE_GATT_DEMO				  ( 1 )
-
-/* Disable pairing confirmation in the demo */
-#define bleconfigENABLE_NUMERIC_COMPARISON  (0)
-#define bleconfigENABLE_SECURE_CONNECTION (0)
-#define bleconfigINPUT_OUTPUT               eBTIONone
-
-/* Include BLE default config at bottom to set the default values for the configurations which are not overridden */
-#include "aws_ble_config_defaults.h"
-
-#endif /* _AWS_BLE_CONFIG_H_ */
+#endif /* _AWS_COMBINED_DEMO_H_ */
