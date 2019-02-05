@@ -121,98 +121,7 @@ BTGattServerCallbacks_t xBTGattServerCb =
     .pxMtuChangedCb           = vMtuChangedCb
 };
 
-
 /*-----------------------------------------------------------*/
-
-BTStatus_t prvCreateDescriptors( BLEService_t * pxService,
-                                 BLECharacteristic_t * pxCharacteristic,
-                                 BLECharacteristicDescr_t * pxDescriptor )
-{
-    BTStatus_t xStatus = eBTStatusSuccess;
-
-    /* Fill up the field and create */
-    pxDescriptor->xAttributeData.xHandle = 0;
-    pxDescriptor->pxParentService = pxService;
-    pxDescriptor->pxParentCharacteristic = pxCharacteristic;
-
-    /* @TODO Check status */
-    xBTInterface.pxGattServerInterface->pxAddDescriptor( xBTInterface.ucServerIf,
-                                                         pxService->xAttributeData.xHandle,
-                                                         &pxDescriptor->xAttributeData.xUuid,
-                                                         pxDescriptor->xPermissions );
-    /* Wait for attribute creation */
-    xEventGroupWaitBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete,
-                         1 << eBLEHALEventCharDescrAddedCb,
-                         pdTRUE,
-						 pdTRUE,
-                         portMAX_DELAY );
-
-    /* Error checks */
-    if( ( xBTInterface.xCbStatus != eBTStatusSuccess ) ||
-        ( pxDescriptor->xAttributeData.xHandle == 0 ) )
-    {
-        xStatus = eBTStatusFail;
-    }
-
-    return xStatus;
-}
-
-/*-----------------------------------------------------------*/
-
-BTStatus_t prvCreateCharacteristicAndDescriptors( BLEService_t * pxService,
-                                                  BLECharacteristic_t * pxCharacteristic,
-                                                  BLEAttribute_t * pxAttributesPtr,
-                                                  size_t * pxAttributeCounter )
-{
-    BTStatus_t xStatus = eBTStatusSuccess;
-    size_t xIndex;
-
-    /* Fill up the field and create */
-    pxCharacteristic->xAttributeData.xHandle = 0;
-    pxCharacteristic->pxParentService = pxService;
-
-    /* Empty attribute for characteristic declaration */
-    pxAttributesPtr[ *pxAttributeCounter ].xAttributeType = eBTDbCharacteristicDecl;
-    pxAttributesPtr[ ( *pxAttributeCounter )++ ].pxCharDeclaration = NULL;
-
-    /* Add characteristic pointer to the attribute table */
-    pxAttributesPtr[ *pxAttributeCounter ].xAttributeType = eBTDbCharacteristic;
-    pxAttributesPtr[ ( *pxAttributeCounter )++ ].pxCharacteristic = pxCharacteristic;
-
-    /* @TODO check status here */
-    xBTInterface.pxGattServerInterface->pxAddCharacteristic( xBTInterface.ucServerIf,
-                                                             pxService->xAttributeData.xHandle,
-                                                             &pxCharacteristic->xAttributeData.xUuid,
-                                                             pxCharacteristic->xProperties,
-                                                             pxCharacteristic->xPermissions );
-
-    /* Wait for attribute creation */
-    xEventGroupWaitBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete,
-                         1 << eBLEHALEventCharAddedCb,
-						 pdTRUE,
-						 pdTRUE,
-                         portMAX_DELAY );
-
-    /* Error checks */
-    if( ( xBTInterface.xCbStatus != eBTStatusSuccess ) ||
-        ( pxCharacteristic->xAttributeData.xHandle == 0 ) )
-    {
-        xStatus = eBTStatusFail;
-    }
-
-    /* Now create all descriptors associated with the characteristics */
-    if( xStatus == eBTStatusSuccess )
-    {
-        for( xIndex = 0; xIndex < pxCharacteristic->xNbDescriptors; xIndex++ )
-        {
-            pxAttributesPtr[ *pxAttributeCounter ].xAttributeType = eBTDbDescriptor;
-            pxAttributesPtr[ ( *pxAttributeCounter )++ ].pxCharacteristicDescr = pxCharacteristic->pxDescriptors[ xIndex ];
-            xStatus = prvCreateDescriptors( pxService, pxCharacteristic, pxCharacteristic->pxDescriptors[ xIndex ] );
-        }
-    }
-
-    return xStatus;
-}
 
 
 /*-----------------------------------------------------------*/
@@ -224,98 +133,59 @@ void prvServiceClean( BLEServiceListElement_t * pxServiceElem )
     if( pxServiceElem != NULL )
     {
         listREMOVE( &pxServiceElem->xServiceList );
-
-        /* Delete service from memory */
-        if( pxServiceElem->pxAttributesPtr != NULL )
-        {
-            vPortFree( pxServiceElem->pxAttributesPtr );
-        }
-
-        if( pxServiceElem->pxService != NULL )
-        {
-			if( pxServiceElem->pxService->pxCharacteristics != NULL )
-			{
-				for( xCharId = 0; xCharId < pxServiceElem->pxService->xNbCharacteristics; xCharId++ )
-				{
-					if( pxServiceElem->pxService->pxCharacteristics[ xCharId ].pxDescriptors != NULL )
-					{
-						vPortFree( pxServiceElem->pxService->pxCharacteristics[ xCharId ].pxDescriptors );
-					}
-				}
-
-				vPortFree( pxServiceElem->pxService->pxCharacteristics );
-			}
-
-			if( pxServiceElem->pxService->pxDescriptors != NULL )
-			{
-				vPortFree( pxServiceElem->pxService->pxDescriptors );
-			}
-
-			if( pxServiceElem->pxService->pxIncludedServices != NULL )
-			{
-				vPortFree( pxServiceElem->pxService->pxIncludedServices );
-			}
-
-            vPortFree( pxServiceElem->pxService );
-        }
-
         vPortFree( pxServiceElem );
     }
 }
 
-
-/*-----------------------------------------------------------*/
-
-void prvTriggerAttriButeCallback( BLEAttribute_t * pxAttribute,
-                                  BLEAttributeEvent_t * pxEventParam )
-{
-    switch( pxAttribute->xAttributeType )
-    {
-        case eBTDbCharacteristic:
-            configASSERT( pxAttribute->pxCharacteristic->pxAttributeEventCallback != NULL );
-            pxAttribute->pxCharacteristic->pxAttributeEventCallback( pxAttribute, pxEventParam );
-            break;
-
-        case eBTDbDescriptor:
-            configASSERT( pxAttribute->pxCharacteristicDescr->pxAttributeEventCallback != NULL );
-            pxAttribute->pxCharacteristicDescr->pxAttributeEventCallback( pxAttribute, pxEventParam );
-            break;
-
-        default:
-            configPRINTF( ( "Unsupported Read/Write callback on Attribute type\n" ) );
-            break;
-    }
-}
-
-/*-----------------------------------------------------------*/
-
-BaseType_t prvGetAttributeFromHandle( uint16_t usAttrHandle,
-                                      BLEAttribute_t * pxAttribute )
+BLEServiceListElement_t * prvGetServiceListElemFromHandle( uint16_t usSrvcHandle )
 {
     Link_t * pxTmpElem;
-    BLEServiceListElement_t * pxServiceElem;
-    BaseType_t bFoundService = pdFAIL;
+    BLEServiceListElement_t * pxServiceElem = NULL;
 
-    /* The service that was just added is the last in the list */
-    if( xSemaphoreTake( ( SemaphoreHandle_t ) &xBTInterface.xThreadSafetyMutex, portMAX_DELAY ) == pdPASS )
+   if( xSemaphoreTake( ( SemaphoreHandle_t ) &xBTInterface.xThreadSafetyMutex, portMAX_DELAY ) == pdPASS )
     {
+        /* Remove service from service list */
         listFOR_EACH( pxTmpElem, &xBTInterface.xServiceListHead )
         {
             pxServiceElem = listCONTAINER( pxTmpElem, BLEServiceListElement_t, xServiceList );
 
-            if( ( usAttrHandle >= pxServiceElem->usStartHandle ) && ( usAttrHandle <= pxServiceElem->usEndHandle ) )
+            if( pxServiceElem->pxService->pusHandlesBuffer[0] == usSrvcHandle )
             {
-                bFoundService = pdPASS;
-                break;
+                    break;
             }
         }
         xSemaphoreGive( ( SemaphoreHandle_t ) &xBTInterface.xThreadSafetyMutex );
     }
+    return pxServiceElem;
+}
 
-    if( bFoundService == pdPASS )
+/*-----------------------------------------------------------*/
+
+BaseType_t prvGetAttributeAndCbFromHandle( uint16_t usAttrHandle,
+                                           BLEAttribute_t ** ppxAttribute,
+                                           BLEAttributeEventCallback_t * pxEventsCallbacks )
+{
+    Link_t * pxTmpElem;
+    BLEServiceListElement_t * pxServiceElem;
+    BaseType_t bFoundService = pdFAIL;
+    size_t xAttributeIndex;
+
+    /* The service that was just added is the last in the list */
+    pxServiceElem = prvGetServiceListElemFromHandle(usAttrHandle);
+
+    if( pxServiceElem != NULL)
     {
-        *pxAttribute = pxServiceElem->pxAttributesPtr[ usAttrHandle - pxServiceElem->usStartHandle ];
-    }
+        for(xAttributeIndex = 0; xAttributeIndex  < pxServiceElem->pxService->xNumberOfAttributes; xAttributeIndex++)
+        {
+            if(pxServiceElem->pxService->pusHandlesBuffer[xAttributeIndex] == usAttrHandle)
+            {
+                *ppxAttribute = &pxServiceElem->pxService->pxBLEAttributes[xAttributeIndex];
+                *pxEventsCallbacks = pxServiceElem->pxEventsCallbacks[xAttributeIndex];
+                bFoundService = pdPASS;
+                break; 
+            }
+        }
+     }
 
     return bFoundService;
 }
@@ -412,45 +282,35 @@ BLEServiceListElement_t * prvGetLastAddedServiceElem( void )
 }
 
 /*-----------------------------------------------------------*/
-
-BLEServiceListElement_t * prvGetServiceListElemFromHandle( uint16_t usSrvcHandle )
+void prvAttributeAdded(uint16_t usHandle, BTStatus_t xStatus, BLEHALEventsInternals_t xEvent )
 {
-    Link_t * pxTmpElem;
-    BLEServiceListElement_t * pxServiceElem = NULL;
+    BLEServiceListElement_t * pxServiceElem = prvGetLastAddedServiceElem();
+    uint16_t usIndex;
 
-    /* Remove service from service list */
-    listFOR_EACH( pxTmpElem, &xBTInterface.xServiceListHead )
+    /* Now that service is found, add the handle */
+    if( pxServiceElem != NULL )
     {
-    	pxServiceElem = listCONTAINER( pxTmpElem, BLEServiceListElement_t, xServiceList );
-
-    	if( pxServiceElem->pxService->xAttributeData.xHandle == usSrvcHandle )
-    	{
-    		break;
-    	}
+        for(usIndex = 0; usIndex < pxServiceElem->pxService->xNumberOfAttributes; usIndex++)
+        {
+          if(pxServiceElem->pxService->pusHandlesBuffer[usIndex] == 0)
+           {
+              pxServiceElem->pxService->pusHandlesBuffer[usIndex] = usHandle; 
+              break;
+           }
+        } 
+        pxServiceElem->usEndHandle = usHandle;
     }
 
-    return pxServiceElem;
+    xBTInterface.xCbStatus = xStatus;
+    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << xEvent );
 }
-
-/*-----------------------------------------------------------*/
 
 void vSeviceAddedCb( BTStatus_t xStatus,
                      uint8_t ucServerIf,
                      BTGattSrvcId_t * pxSrvcId,
                      uint16_t usSrvcHandle )
 {
-    BLEServiceListElement_t * pxServiceElem = prvGetLastAddedServiceElem();
-
-    /* Now that service is found, add the handle */
-    if( pxServiceElem != NULL )
-    {
-        pxServiceElem->usStartHandle += usSrvcHandle;
-        pxServiceElem->usEndHandle += usSrvcHandle;
-        pxServiceElem->pxService->xAttributeData.xHandle = usSrvcHandle;
-    }
-
-    xBTInterface.xCbStatus = xStatus;
-    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << eBLEHALEventSeviceAddedCb );
+  prvAttributeAdded(usSrvcHandle,  xStatus, eBLEHALEventServiceAddedCb);
 }
 
 /*-----------------------------------------------------------*/
@@ -461,19 +321,7 @@ void vCharAddedCb( BTStatus_t xStatus,
                    uint16_t usSrvcHandle,
                    uint16_t usHandle )
 {
-    BLEServiceListElement_t * pxServiceElem = prvGetLastAddedServiceElem();
-    BLECharacteristic_t * pxCharacteristic;
-
-    /* Now that service is found, add the handle */
-    if( pxServiceElem != NULL )
-    {
-        pxCharacteristic = pxServiceElem->pxAttributesPtr[ usHandle - pxServiceElem->usStartHandle ].pxCharacteristic;
-
-        pxCharacteristic->xAttributeData.xHandle = usHandle;
-    }
-
-    xBTInterface.xCbStatus = xStatus;
-    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << eBLEHALEventCharAddedCb );
+    prvAttributeAdded(usSrvcHandle,  xStatus, eBLEHALEventCharAddedCb);
 }
 
 /*-----------------------------------------------------------*/
@@ -484,19 +332,16 @@ void vCharDescrAddedCb( BTStatus_t xStatus,
                         uint16_t usSrvcHandle,
                         uint16_t usHandle )
 {
-    BLEServiceListElement_t * pxServiceElem = prvGetLastAddedServiceElem();
-    BLECharacteristicDescr_t * pxCharacteristicDescr;
+    prvAttributeAdded(usSrvcHandle,  xStatus, eBLEHALEventCharDescrAddedCb);
+}
 
-    /* Now that service is found, add the handle */
-    if( pxServiceElem != NULL )
-    {
-        pxCharacteristicDescr = pxServiceElem->pxAttributesPtr[ usHandle - pxServiceElem->usStartHandle ].pxCharacteristicDescr;
 
-        pxCharacteristicDescr->xAttributeData.xHandle = usHandle;
-    }
-
-    xBTInterface.xCbStatus = xStatus;
-    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << eBLEHALEventCharDescrAddedCb );
+void vIncludedServiceAdded( BTStatus_t xStatus,
+                            uint8_t ucServerIf,
+                            uint16_t usSrvcHandle,
+                            uint16_t usInclSrvcHandle )
+{
+    prvAttributeAdded(usSrvcHandle,  xStatus, eBLEHALEventIncludedServiceAdded);
 }
 
 /*-----------------------------------------------------------*/
@@ -505,21 +350,8 @@ void vServiceStartedCb( BTStatus_t xStatus,
                         uint8_t ucServerIf,
                         uint16_t usSrvcHandle )
 {
-    BLEServiceListElement_t * pxServiceElem;
-
-    if( xStatus == eBTStatusSuccess )
-    {
-    	pxServiceElem = prvGetServiceListElemFromHandle( usSrvcHandle );
-
-        if( pxServiceElem != NULL )
-        {
-            ( ( BLEServiceStartedCallback_t ) xBTInterface.pxPendingServiceEvent )( xStatus, pxServiceElem->pxService );
-        }
-        else
-        {
-            configPRINTF( ( "Started service not registered in service list\n" ) );
-        }
-    }
+    xBTInterface.xCbStatus = xStatus;
+    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << eBLEHALEventSeviceStartedCb );
 }
 
 /*-----------------------------------------------------------*/
@@ -528,21 +360,8 @@ void vServiceStoppedCb( BTStatus_t xStatus,
                         uint8_t ucServerIf,
                         uint16_t usSrvcHandle )
 {
-    BLEServiceListElement_t * pxServiceElem;
-
-    if( xStatus == eBTStatusSuccess )
-    {
-    	pxServiceElem = prvGetServiceListElemFromHandle( usSrvcHandle );
-
-        if( pxServiceElem != NULL )
-        {
-            ( ( BLEServiceStoppedCallback_t ) xBTInterface.pxPendingServiceEvent )( xStatus, pxServiceElem->pxService );
-        }
-        else
-        {
-            configPRINTF( ( "Stopped service not registered in service list\n" ) );
-        }
-    }
+     xBTInterface.xCbStatus = xStatus;
+    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << eBLEHALEventSeviceStoppedCb );
 }
 
 /*-----------------------------------------------------------*/
@@ -553,6 +372,7 @@ void vServiceDeletedCb( BTStatus_t xStatus,
 {
     BLEServiceListElement_t * pxServiceElem;
 
+    /* The service has been stopped so it can be deleted safely */
     pxServiceElem = prvGetServiceListElemFromHandle( usSrvcHandle );
 
     if( pxServiceElem != NULL )
@@ -565,30 +385,7 @@ void vServiceDeletedCb( BTStatus_t xStatus,
     }
 
     xBTInterface.xCbStatus = xStatus;
-
-    ( ( BLEServiceDeletedCallback_t ) xBTInterface.pxPendingServiceEvent )( xStatus, usSrvcHandle );
-}
-
-/*-----------------------------------------------------------*/
-
-void vIncludedServiceAdded( BTStatus_t xStatus,
-                            uint8_t ucServerIf,
-                            uint16_t usSrvcHandle,
-                            uint16_t usInclSrvcHandle )
-{
-    BLEServiceListElement_t * pxServiceElem = prvGetLastAddedServiceElem();
-    BLEService_t * pxIncludedService;
-
-    /* Now that service is found, add the handle */
-    if( pxServiceElem != NULL )
-    {
-        pxIncludedService = pxServiceElem->pxAttributesPtr[ usInclSrvcHandle - pxServiceElem->usStartHandle ].pxService;
-
-        pxIncludedService->xAttributeData.xHandle = usInclSrvcHandle;
-    }
-
-    xBTInterface.xCbStatus = xStatus;
-    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << eBLEHALEventIncludedServiceAdded );
+    ( void ) xEventGroupSetBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete, 1 << eBLEHALEventServiceDeletedCb );
 }
 
 /*-----------------------------------------------------------*/
@@ -599,11 +396,12 @@ void vRequestReadCb( uint16_t usConnId,
                      uint16_t usAttrHandle,
                      uint16_t usOffset )
 {
-    BLEAttribute_t xAttribute;
+    BLEAttribute_t * pxAttribute;
+    BLEAttributeEventCallback_t xEventsCallbacks;
     BLEReadEventParams_t xReadParam;
     BLEAttributeEvent_t xEventParam;
 
-    if( prvGetAttributeFromHandle( usAttrHandle, &xAttribute ) == pdPASS )
+    if( prvGetAttributeAndCbFromHandle( usAttrHandle, &pxAttribute, &xEventsCallbacks ) == pdPASS )
     {
         xReadParam.pxAttribute = &xAttribute;
         xReadParam.pxRemoteBdAddr = pxBda;
@@ -630,11 +428,12 @@ void vRequestWriteCb( uint16_t usConnId,
                       bool bIsPrep,
                       uint8_t * pucValue )
 {
-    BLEAttribute_t xAttribute;
+    BLEAttribute_t * pxAttribute;
     BLEWriteEventParams_t xWriteParam;
     BLEAttributeEvent_t xEventParam;
+    BLEAttributeEventCallback_t xEventsCallbacks;
 
-    if( prvGetAttributeFromHandle( usAttrHandle, &xAttribute ) == pdPASS )
+    if( prvGetAttributeAndCbFromHandle( usAttrHandle, &pxAttribute, &xEventsCallbacks ) == pdPASS )
     {
         if( bIsPrep == true )
         {
@@ -672,11 +471,12 @@ void vExecWriteCb( uint16_t usConnId,
                    BTBdaddr_t * pxBda,
                    bool bExecWrite )
 {
-    BLEAttribute_t xAttribute;
+    BLEAttribute_t * pxAttribute;
     BLEExecWriteEventParams_t xExecWriteParam;
     BLEAttributeEvent_t xEventParam;
+    BLEAttributeEventCallback_t xEventsCallbacks;
 
-    if( prvGetAttributeFromHandle( xBTInterface.usHandlePendingPrepareWrite, &xAttribute ) == pdPASS )
+    if( prvGetAttributeAndCbFromHandle( xBTInterface.usHandlePendingPrepareWrite, &pxAttribute, &xEventsCallbacks ) == pdPASS )
     {
         xExecWriteParam.pxAttribute = &xAttribute;
         xExecWriteParam.pxRemoteBdAddr = pxBda;
@@ -715,11 +515,12 @@ void vMtuChangedCb( uint16_t usConnId,
 static void vResponseConfirmationCb( BTStatus_t xStatus,
                                      uint16_t usHandle )
 {
-    BLEAttribute_t xAttribute;
+    BLEAttribute_t * pxAttribute;
     BLERespConfirmEventParams_t xRespConfirmParam;
     BLEAttributeEvent_t xEventParam;
+    BLEAttributeEventCallback_t xEventsCallbacks;
 
-    if( prvGetAttributeFromHandle( usHandle, &xAttribute ) == pdPASS )
+    if( prvGetAttributeAndCbFromHandle( usHandle, &pxAttribute,  &xEventsCallbacks ) == pdPASS )
     {
         xRespConfirmParam.pxAttribute = &xAttribute;
         xRespConfirmParam.xStatus = xStatus;
@@ -739,8 +540,9 @@ static void vIndicationSentCb( uint16_t usConnId,
     BLEAttribute_t xAttribute;
     BLEIndicationSentEventParams_t xIndicationSentParam;
     BLEAttributeEvent_t xEventParam;
+    BLEAttributeEventCallback_t pxEventsCallbacks;
 
-    if( prvGetAttributeFromHandle( xBTInterface.usHandlePendingIndicationResponse, &xAttribute ) == pdPASS )
+    if( prvGetAttributeAndCbFromHandle( xBTInterface.usHandlePendingIndicationResponse, &xAttribute ) == pdPASS )
     {
         xIndicationSentParam.pxAttribute = &xAttribute;
         xIndicationSentParam.usConnId = usConnId;
@@ -754,159 +556,118 @@ static void vIndicationSentCb( uint16_t usConnId,
 }
 
 /*-----------------------------------------------------------*/
-
-BTStatus_t BLE_CreateService( BLEService_t ** ppxService,
-                              size_t xNbCharacteristic,
-                              size_t xNbDescriptors,
-                              size_t xNumDescrsPerChar[],
-                              size_t xNbIncludedServices )
+BTStatus_t prvAddServiceToList(BLEService_t * pxService, BLEAttributeEventCallback_t pxEventsCallbacks[])
 {
-    BTStatus_t xStatus = eBTStatusSuccess;
-    BLEServiceListElement_t * pxNewElem = NULL;
-    uint16_t usNumAttributes;
-    size_t xCharId;
+  BTStatus_t xStatus = eBTStatusSuccess;
+  BLEServiceListElement_t * pxServiceElem;
 
-    if( xSemaphoreTake( ( SemaphoreHandle_t ) &xBTInterface.xThreadSafetyMutex, portMAX_DELAY ) == pdPASS )
+  /* Create a space in the list for the service. */
+  pxNewElem = pvPortMalloc( sizeof( BLEServiceListElement_t ) );
+  memset( pxNewElem, 0, sizeof( BLEServiceListElement_t ) );
+
+  if( pxNewElem != NULL )
+  {
+    pxNewElem->pxEventsCallbacks = pxEventsCallbacks;
+    pxNewElem->pxService = pxService;
+
+    if( pxNewElem->pxAttributesPtr != NULL )
     {
-
-        if( ppxService == NULL )
+        if( xSemaphoreTake( ( SemaphoreHandle_t ) &xBTInterface.xThreadSafetyMutex, portMAX_DELAY ) == pdPASS )
         {
-            xStatus = eBTStatusParamInvalid;
+          listADD( &xBTInterface.xServiceListHead, &pxNewElem->xServiceList );
+          xSemaphoreGive( ( SemaphoreHandle_t ) &xBTInterface.xThreadSafetyMutex );
         }
-
-        /* Create a space in the list for the service. */
-        if( xStatus == eBTStatusSuccess )
-        {
-            pxNewElem = pvPortMalloc( sizeof( BLEServiceListElement_t ) );
-            memset( pxNewElem, 0, sizeof( BLEServiceListElement_t ) );
-
-            if( pxNewElem != NULL )
-            {
-
-                    /* Compute the total number of handles
-                     * Multiply characteristics by 2 since they need a declaration. */
-                    usNumAttributes = xNbCharacteristic * 2
-                                      + xNbDescriptors
-                                      + xNbIncludedServices + 1;
-
-                    pxNewElem->usStartHandle = 0;
-                    pxNewElem->usEndHandle = usNumAttributes - 1;
-                    pxNewElem->pxAttributesPtr = pvPortMalloc( usNumAttributes * sizeof( BLEAttribute_t ) );
-
-                    if( pxNewElem->pxAttributesPtr != NULL )
-                    {
-                        memset( pxNewElem->pxAttributesPtr, 0, sizeof( BLEAttribute_t ) * usNumAttributes );
-                        listADD( &xBTInterface.xServiceListHead, &pxNewElem->xServiceList );
-                    }
-                    else
-                    {
-                        xStatus = eBTStatusNoMem;
-                    }
-            }
-            else
-            {
-                xStatus = eBTStatusFail;
-            }
-        }
-
-        /* Allocate Memory for the service. */
-        if( xStatus == eBTStatusSuccess )
-        {
-            *ppxService = pvPortMalloc( sizeof( BLEService_t ) );
-            memset( *ppxService, 0, sizeof( BLEService_t ) );
-
-            if( *ppxService == NULL )
-            {
-                xStatus = eBTStatusNoMem;
-            }
-            else
-            {
-                /* Add newly created service to the list. */
-                pxNewElem->pxService = *ppxService;
-                ( *ppxService )->xNbCharacteristics = xNbCharacteristic;
-                ( *ppxService )->xNbDescriptors = xNbDescriptors;
-                ( *ppxService )->xNbIncludedServices = xNbIncludedServices;
-                ( *ppxService )->pxCharacteristics = NULL;
-                ( *ppxService )->pxDescriptors = NULL;
-                ( *ppxService )->pxIncludedServices = NULL;
-
-                if( xNbCharacteristic > 0 )
-                {
-                    ( *ppxService )->pxCharacteristics = pvPortMalloc( sizeof( BLECharacteristic_t ) * xNbCharacteristic );
-
-                    if( ( *ppxService )->pxCharacteristics != NULL )
-                    {
-                        memset( ( *ppxService )->pxCharacteristics, 0, sizeof( BLECharacteristic_t ) * xNbCharacteristic );
-
-                        for( xCharId = 0; xCharId < xNbCharacteristic; xCharId++ )
-                        {
-                            if( xNumDescrsPerChar[ xCharId ] > 0 )
-                            {
-                                ( *ppxService )->pxCharacteristics[ xCharId ].pxDescriptors = pvPortMalloc( sizeof( BLECharacteristicDescr_t * ) * xNumDescrsPerChar[ xCharId ] );
-
-                                if( ( *ppxService )->pxCharacteristics[ xCharId ].pxDescriptors == NULL )
-                                {
-                                    xStatus = eBTStatusNoMem;
-                                    break;
-                                }
-                                else
-                                {
-                                    memset( ( *ppxService )->pxCharacteristics[ xCharId ].pxDescriptors, 0, sizeof( BLECharacteristicDescr_t * ) * xNumDescrsPerChar[ xCharId ] );
-                                }
-                            }
-                            else
-                            {
-                                ( *ppxService )->pxCharacteristics[ xCharId ].pxDescriptors = NULL;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        xStatus = eBTStatusNoMem;
-                    }
-                }
-
-                if( ( xNbDescriptors > 0 ) && ( xStatus == eBTStatusSuccess ) )
-                {
-                    ( *ppxService )->pxDescriptors = pvPortMalloc( sizeof( BLECharacteristicDescr_t ) * xNbDescriptors );
-
-                    if( ( *ppxService )->pxDescriptors != NULL )
-                    {
-                        memset( ( *ppxService )->pxDescriptors, 0, sizeof( BLECharacteristicDescr_t ) * xNbDescriptors );
-                    }
-                    else
-                    {
-                        xStatus = eBTStatusNoMem;
-                    }
-                }
-
-                if( ( xNbIncludedServices > 0 ) && ( xStatus == eBTStatusSuccess ) )
-                {
-                    ( *ppxService )->pxIncludedServices = pvPortMalloc( sizeof( BLEService_t * ) * xNbIncludedServices );
-
-                    if( ( *ppxService )->pxIncludedServices != NULL )
-                    {
-                        memset( ( *ppxService )->pxIncludedServices, 0, sizeof( BLEService_t * ) * xNbIncludedServices );
-                    }
-                    else
-                    {
-                        xStatus = eBTStatusNoMem;
-                    }
-                }
-            }
-        }
-
-        if( xStatus != eBTStatusSuccess )
-        {
-            prvServiceClean( pxNewElem );
-        }
-
-        xSemaphoreGive( ( SemaphoreHandle_t ) &xBTInterface.xThreadSafetyMutex );
     }
     else
     {
-        xStatus = eBTStatusFail;
+        xStatus = eBTStatusNoMem;
     }
+  }
+  else
+  {
+    xStatus = eBTStatusFail;
+  }
+
+  return eBTStatusSuccess;
+}
+
+BTStatus_t prvCreateAttributes(BLEService_t * pxService)
+{
+  uint16_t usAttributes = 0;
+  BLEAttribute_t * pxCurrentAtrribute;
+  BTStatus_t xStatus = eBTStatusParamInvalid;
+
+   for(usAttributes = 0; usAttributes < pxService->xNumberOfAttributes; usAttributes++)
+    {
+        pxCurrentAtrribute = &pxService->pxBLEAttributes[usAttributes];
+        switch(pxCurrentAtrribute->xAttributeType)
+        {
+            case eBTDbIncludedService:
+            {
+
+              break;
+            }
+            case eBTDbCharacteristicDecl:
+            {
+
+              break;
+            }
+            case eBTDbCharacteristic:
+            {
+              xBTInterface.pxGattServerInterface->pxAddCharacteristic( xBTInterface.ucServerIf,
+                                                                       pxService->xAttributeData.xHandle,
+                                                                       &pxCharacteristic->xAttributeData.xUuid,
+                                                                       pxCharacteristic->xProperties,
+                                                                       pxCharacteristic->xPermissions );
+              break;
+            }
+            default:
+        }
+
+
+        if(xStatus != eBTStatusSuccess)
+        {
+          break;
+        }
+    }
+    return xStatus;
+}
+
+BTStatus_t BLE_CreateService( BLEService_t * pxService, BLEAttributeEventCallback_t pxEventsCallbacks[] )
+{
+  BTStatus_t xStatus = eBTStatusParamInvalid;
+
+  if(pxService == NULL)
+  {
+    memset(pxService->pusHandlesBuffer, 0, pxService->xNumberOfAttributes);
+    /* Create Service. Start handle is 0 so the number of handle is usEndHandle + 1.
+     * The real handle is assigned in the callback of that call.*/
+    xStatus = xBTInterface.pxGattServerInterface->pxAddService( xBTInterface.ucServerIf,
+                                                      &pxService->pxBLEAttributes[0]->xSrvcId,
+                                                      pxService->xNumberOfAttributes );
+
+    xEventGroupWaitBits( ( EventGroupHandle_t ) &xBTInterface.xWaitOperationComplete,
+                                             1 << eBLEHALEventSeviceAddedCb,
+                                             pdTRUE,
+                                             pdTRUE,
+                                             portMAX_DELAY );
+  }
+
+  /* Create all attributes. */
+  if(xStatus == eBTStatusSuccess)
+  {
+     xStatus = prvCreateAttributes(pxService);
+  }
+
+  /* After all attributes have been create successfully, the service is added to the list. */
+  if(xStatus == eBTStatusSuccess)
+  {
+     xStatus = prvAddServiceToList(pxService, pxEventsCallbacks);
+  }else /* Otherwise the service is destroyed. */
+  {
+
+  }
+
 
     return xStatus;
 }
@@ -915,6 +676,22 @@ BTStatus_t BLE_CreateService( BLEService_t ** ppxService,
 
 BTStatus_t BLE_AddService( BLEService_t * pxService )
 {
+    if (pxService != NULL)
+    {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     BTStatus_t xStatus = eBTStatusSuccess;
     BTGattSrvcId_t pxSrvcId;
     BLEServiceListElement_t * pxServiceElem;
@@ -1020,8 +797,7 @@ BTStatus_t BLE_AddService( BLEService_t * pxService )
 
 /*-----------------------------------------------------------*/
 
-BTStatus_t BLE_StartService( BLEService_t * pxService,
-                             BLEServiceStartedCallback_t pxCallback )
+BTStatus_t BLE_StartService( BLEService_t * pxService)
 {
     BTStatus_t xStatus = eBTStatusSuccess;
 
@@ -1050,9 +826,7 @@ BTStatus_t BLE_StopService( BLEService_t * pxService,
 
     if( pxService != NULL )
     {
-        xBTInterface.pxPendingServiceEvent = ( void * ) pxCallback;
-        xStatus = xBTInterface.pxGattServerInterface->pxStopService( xBTInterface.ucServerIf,
-                                                                     pxService->xAttributeData.xHandle );
+
     }
     else
     {
@@ -1071,6 +845,10 @@ BTStatus_t BLE_DeleteService( BLEService_t * pxService,
 
     if( pxService != NULL )
     {
+        xBTInterface.pxPendingServiceEvent = ( void * ) pxCallback;
+        xStatus = xBTInterface.pxGattServerInterface->pxStopService( xBTInterface.ucServerIf,
+                                                                     pxService->xAttributeData.xHandle );
+        /* To DO remove service from the list */
         xBTInterface.pxPendingServiceEvent = ( void * ) pxCallback;
         xStatus = xBTInterface.pxGattServerInterface->pxDeleteService( xBTInterface.ucServerIf,
                                                                        pxService->xAttributeData.xHandle );

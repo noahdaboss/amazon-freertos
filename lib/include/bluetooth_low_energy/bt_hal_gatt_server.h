@@ -490,8 +490,7 @@ typedef struct
      * @return Returns eBTStatusSuccess on successful call.
      */
     BTStatus_t ( * pxAddServiceBlob )( uint8_t ucServerIf,
-                                   BTGattDbElement_t * pxElements,
-                                   uint32_t ulElementsCount);
+                                   BLEService_t * pxService);
 
     /**
      * @brief Create a new service.
