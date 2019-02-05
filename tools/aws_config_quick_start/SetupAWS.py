@@ -27,8 +27,8 @@ def prereq():
     if not thing_obj.create():
 
         # Create a Certificate
-        cert_obj = certs.Certificate()
-        result = cert_obj.create()
+        # cert_obj = certs.Certificate()
+        # result = cert_obj.create()
 
         # Store certId
         cert_id = result['certificateId']
@@ -57,11 +57,11 @@ def prereq():
         os.chmod(private_key_pem_file_path, 0o444)
         private_key_pem_file.close()
 
-        # Create a Policy
-        policy_document = misc.create_policy_document()
-        policy_name = thing_name + '_amazon_freertos_policy'
-        policy_obj = policy.Policy(policy_name, policy_document)
-        policy_obj.create()
+        # # Create a Policy
+        # policy_document = misc.create_policy_document()
+        # policy_name = thing_name + '_amazon_freertos_policy'
+        # policy_obj = policy.Policy(policy_name, policy_document)
+        # policy_obj.create()
 
         # Attach certificate to Thing
         cert_obj.attach_thing(thing_name)
